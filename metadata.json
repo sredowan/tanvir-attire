@@ -1,0 +1,6 @@
+{
+  "name": "Tanvir Attire",
+  "description": "Premium, ultra-modern e-commerce for luxury kurtas and t-shirts with dynamic interactive presentations, tailored shipping options for Australia, and an integrated admin control panel connected to Stripe.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

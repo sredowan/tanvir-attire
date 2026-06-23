@@ -65,8 +65,8 @@ export default function HomePage({ products, config, isReady, dataError, onAddTo
           </p>
         </div>
 
-        <div className="flex flex-col sm:flex-row justify-between items-center border-b border-[#E6B579]/10 pb-6 gap-4">
-          <div className="flex flex-wrap gap-2">
+        <div className="flex justify-center items-center border-b border-[#E6B579]/10 pb-6 w-full">
+          <div className="flex flex-nowrap overflow-x-auto justify-center items-center gap-2 max-w-full w-full py-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {filterBtn('all', 'All Styles')}
             {categories.map((c) => filterBtn(c.value, c.label))}
           </div>

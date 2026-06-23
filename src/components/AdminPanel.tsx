@@ -37,6 +37,62 @@ export default function AdminPanel({
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
+  // Category creation + image upload
+  const [newCatLabel, setNewCatLabel] = useState('');
+  const [uploadingFor, setUploadingFor] = useState<string | null>(null); // 'new' | productId | null
+
+  // Append a category to the store config (deduped). Returns the value to select.
+  const addCategoryValue = (label: string): string => {
+    const trimmed = label.trim();
+    const value = slugify(trimmed);
+    if (!value) return '';
+    setLocalConfig((prev) => {
+      const cats = getCategories(prev);
+      if (cats.some((c) => c.value === value)) return prev;
+      return { ...prev, categories: [...cats, { value, label: trimmed }] };
+    });
+    return value;
+  };
+
+  const uploadImageFile = async (file: File): Promise<string> => {
+    const fd = new FormData();
+    fd.append('file', file);
+    const res = await fetch('/api/admin/upload', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${adminToken()}` },
+      body: fd,
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) throw new Error(data.message || 'Upload failed.');
+    return data.url as string;
+  };
+
+  const handleUploadForNew = async (file: File) => {
+    setUploadingFor('new');
+    try {
+      const url = await uploadImageFile(file);
+      setNewProduct((prev) => ({ ...prev, images: [...(prev.images || []), url] }));
+      setStatusMsg({ type: 'success', text: 'Image uploaded.' });
+    } catch (e: any) {
+      setStatusMsg({ type: 'error', text: e.message || 'Upload failed.' });
+    } finally {
+      setUploadingFor(null);
+    }
+  };
+
+  const handleUploadForProduct = async (id: string, file: File) => {
+    setUploadingFor(id);
+    try {
+      const url = await uploadImageFile(file);
+      setLocalProducts((prev) => prev.map((p) => (p.id === id ? { ...p, images: [...p.images, url] } : p)));
+      setStatusMsg({ type: 'success', text: 'Image uploaded — remember to Save.' });
+    } catch (e: any) {
+      setStatusMsg({ type: 'error', text: e.message || 'Upload failed.' });
+    } finally {
+      setUploadingFor(null);
+    }
+  };
+
   const adminToken = () => localStorage.getItem('ta_admin_token') || '';
   const authFetch = (url: string, opts: RequestInit = {}) =>
     fetch(url, {
@@ -445,6 +501,42 @@ export default function AdminPanel({
   const editorInput =
     'w-full bg-[#06211E] border border-[#E6B579]/20 p-2 text-xs text-white placeholder-gray-600 focus:outline-none focus:border-[#E6B579]';
 
+  // Category dropdown + inline "add new category" control (writes to store config).
+  const renderCategoryControl = (value: string, setValue: (v: string) => void) => (
+    <div className="space-y-1.5">
+      <select className={editorInput} value={value} onChange={(e) => setValue(e.target.value)}>
+        {getCategories(localConfig).map((c) => (
+          <option key={c.value} value={c.value}>{c.label}</option>
+        ))}
+        {/* allow a value not yet in the list (e.g. legacy) to remain selectable */}
+        {!getCategories(localConfig).some((c) => c.value === value) && value && (
+          <option value={value}>{value}</option>
+        )}
+      </select>
+      <div className="flex gap-1.5">
+        <input
+          className={editorInput}
+          placeholder="New category name (e.g. Sherwani)"
+          value={newCatLabel}
+          onChange={(e) => setNewCatLabel(e.target.value)}
+        />
+        <button
+          type="button"
+          onClick={() => {
+            const v = addCategoryValue(newCatLabel);
+            if (v) {
+              setValue(v);
+              setNewCatLabel('');
+            }
+          }}
+          className="px-3 py-2 bg-[#E6B579]/10 hover:bg-[#E6B579] text-[#E6B579] hover:text-[#06211E] text-[10px] font-bold uppercase tracking-widest transition-all flex items-center gap-1 shrink-0"
+        >
+          <FolderPlus className="w-3.5 h-3.5" /> Add
+        </button>
+      </div>
+    </div>
+  );
+
   const renderProductEditor = (p: Product) => (
     <div className="space-y-5">
       {/* Core fields */}
@@ -455,14 +547,7 @@ export default function AdminPanel({
         </div>
         <div className="space-y-1">
           <label className={editorLabel}>Category</label>
-          <select
-            className={editorInput}
-            value={p.category}
-            onChange={(e) => updateProductField(p.id, { category: e.target.value as Product['category'] })}
-          >
-            <option value="kurta">Kurta</option>
-            <option value="tshirt">T-Shirt</option>
-          </select>
+          {renderCategoryControl(p.category, (v) => updateProductField(p.id, { category: v }))}
         </div>
       </div>
 
@@ -521,9 +606,22 @@ export default function AdminPanel({
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <label className={`${editorLabel} flex items-center gap-1.5`}><ImageIcon className="w-3.5 h-3.5" /> Images</label>
-          <button onClick={() => addProductImage(p.id)} className="text-[9px] font-mono uppercase tracking-widest text-[#E6B579] hover:text-white flex items-center gap-1">
-            <Plus className="w-3 h-3" /> Add image
-          </button>
+          <div className="flex items-center gap-3">
+            <label className={`text-[9px] font-mono uppercase tracking-widest cursor-pointer flex items-center gap-1 ${uploadingFor === p.id ? 'text-gray-500' : 'text-[#E6B579] hover:text-white'}`}>
+              {uploadingFor === p.id ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />}
+              {uploadingFor === p.id ? 'Uploading…' : 'Upload'}
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                disabled={uploadingFor === p.id}
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUploadForProduct(p.id, f); e.currentTarget.value = ''; }}
+              />
+            </label>
+            <button onClick={() => addProductImage(p.id)} className="text-[9px] font-mono uppercase tracking-widest text-[#E6B579] hover:text-white flex items-center gap-1">
+              <Plus className="w-3 h-3" /> Add URL
+            </button>
+          </div>
         </div>
         <div className="space-y-2">
           {p.images.map((img, idx) => (
@@ -906,14 +1004,7 @@ export default function AdminPanel({
 
                   <div className="space-y-1">
                     <label className="text-[10px] text-gray-400 font-mono uppercase tracking-wider">Product Category</label>
-                    <select
-                      className="w-full bg-[#06211E] border border-[#E6B579]/20 p-2 text-xs text-white focus:outline-none focus:border-[#E6B579]"
-                      value={newProduct.category}
-                      onChange={(e) => setNewProduct(prev => ({ ...prev, category: e.target.value as any }))}
-                    >
-                      <option value="kurta">Luxury oriental Kurta</option>
-                      <option value="tshirt">Heavyweight Legacy Tee</option>
-                    </select>
+                    {renderCategoryControl(newProduct.category || 'kurta', (v) => setNewProduct((prev) => ({ ...prev, category: v })))}
                   </div>
 
                   <div className="grid grid-cols-2 gap-2">
@@ -998,6 +1089,48 @@ export default function AdminPanel({
                     placeholder="Provide premium description of texture, draping, and luxury craftsmanship..."
                     value={newProduct.description}
                     onChange={(e) => setNewProduct(prev => ({ ...prev, description: e.target.value }))}
+                  />
+                </div>
+
+                {/* Images for the new product */}
+                <div className="space-y-2 mt-4">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[10px] text-gray-400 font-mono uppercase tracking-wider flex items-center gap-1.5"><ImageIcon className="w-3.5 h-3.5" /> Images</label>
+                    <label className={`text-[9px] font-mono uppercase tracking-widest cursor-pointer flex items-center gap-1 ${uploadingFor === 'new' ? 'text-gray-500' : 'text-[#E6B579] hover:text-white'}`}>
+                      {uploadingFor === 'new' ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />}
+                      {uploadingFor === 'new' ? 'Uploading…' : 'Upload image'}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        disabled={uploadingFor === 'new'}
+                        onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUploadForNew(f); e.currentTarget.value = ''; }}
+                      />
+                    </label>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {(newProduct.images || []).map((img, idx) => (
+                      <div key={idx} className="relative w-14 h-16 border border-[#E6B579]/20 overflow-hidden group">
+                        {img ? <img src={img} alt="" className="w-full h-full object-cover" /> : null}
+                        <button
+                          type="button"
+                          onClick={() => setNewProduct((prev) => ({ ...prev, images: (prev.images || []).filter((_, i) => i !== idx) }))}
+                          className="absolute top-0 right-0 bg-rose-600 text-white opacity-0 group-hover:opacity-100 transition-opacity p-0.5"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  <input
+                    className="w-full bg-[#06211E] border border-[#E6B579]/20 p-2 text-xs text-white placeholder-gray-600 focus:outline-none focus:border-[#E6B579]"
+                    placeholder="…or paste an image URL and press Enter"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        const v = (e.target as HTMLInputElement).value.trim();
+                        if (v) { setNewProduct((prev) => ({ ...prev, images: [...(prev.images || []), v] })); (e.target as HTMLInputElement).value = ''; }
+                      }
+                    }}
                   />
                 </div>
 

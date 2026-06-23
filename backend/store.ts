@@ -106,6 +106,34 @@ export async function ensureSeeded(): Promise<void> {
     return;
   }
   const pool = getPool()!;
+  
+  // Check if products table exists, if not, execute schema.sql
+  try {
+    await pool.query('SELECT COUNT(*) AS n FROM products');
+  } catch (err: any) {
+    if (err?.code === 'ER_NO_SUCH_TABLE' || err?.errno === 1146) {
+      console.log('[store] Products table does not exist. Initializing schema from schema.sql...');
+      const schemaPath = path.join(process.cwd(), 'backend', 'schema.sql');
+      if (fs.existsSync(schemaPath)) {
+        const schemaSql = fs.readFileSync(schemaPath, 'utf8');
+        // Split on semicolon while removing comments
+        const queries = schemaSql
+          .split(';')
+          .map((q) => q.replace(/--.*$/gm, '').trim())
+          .filter((q) => q.length > 0);
+          
+        for (const query of queries) {
+          await pool.query(query);
+        }
+        console.log('[store] Schema initialized successfully.');
+      } else {
+        throw new Error(`schema.sql not found at ${schemaPath}`);
+      }
+    } else {
+      throw err;
+    }
+  }
+
   const [rows] = await pool.query<any[]>('SELECT COUNT(*) AS n FROM products');
   if (rows[0].n === 0) {
     console.log('[store] Empty products table — seeding initial catalogue.');
@@ -211,7 +239,11 @@ export async function saveCatalogue(products: Product[], config: StoreConfig): P
 
     await conn.commit();
   } catch (err) {
-    await conn.rollback();
+    try {
+      await conn.rollback();
+    } catch (rollbackErr) {
+      console.error('[store] Rollback failed:', rollbackErr);
+    }
     throw err;
   } finally {
     conn.release();

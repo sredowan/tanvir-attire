@@ -77,7 +77,7 @@ export default function Footer({ onOpenAdmin }: FooterProps) {
 
         {/* Lower copy and payment details */}
         <div className="border-t border-white/5 mt-10 pt-6 flex flex-col md:flex-row items-center justify-between text-[10px] text-gray-500 gap-4">
-          <p>© {new Date().getFullYear()} Tanvir Attire Australia. ABN 88 124 951 812. Built for Royal Comfort.</p>
+          <p>© {new Date().getFullYear()} Tanvir Attire Australia. ABN 66 355 065 231. Built for Royal Comfort.</p>
           <div className="flex items-center gap-2 font-mono text-[9px] text-[#E6B579]/40 select-none">
             <CreditCard className="w-3.5 h-3.5 shrink-0" />
             <span>Stripe Certified • Visa • Mastercard • AMEX • Apple Pay • GPay</span>

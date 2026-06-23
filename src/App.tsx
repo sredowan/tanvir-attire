@@ -1,4 +1,4 @@
-import { useState, useEffect, type ReactNode } from 'react';
+import { useState, useEffect, lazy, Suspense, type ReactNode } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { Sparkles, Printer, CheckCircle2, X } from 'lucide-react';
@@ -7,11 +7,15 @@ import { INITIAL_PRODUCTS, INITIAL_STORE_CONFIG } from './data';
 import { normalizeProduct } from './lib/products';
 import Navbar from './components/Navbar';
 import CartDrawer from './components/CartDrawer';
-import AdminPanel from './components/AdminPanel';
 import Footer from './components/Footer';
 import HomePage from './pages/HomePage';
-import LegacyPage from './pages/LegacyPage';
-import ProductDetailPage from './pages/ProductDetailPage';
+
+// Code-split heavy/secondary views so they don't bloat the initial bundle.
+// The home page stays eager for the fastest possible first paint; everything
+// else (legacy story, product detail, the large admin dashboard) loads on demand.
+const LegacyPage = lazy(() => import('./pages/LegacyPage'));
+const ProductDetailPage = lazy(() => import('./pages/ProductDetailPage'));
+const AdminPanel = lazy(() => import('./components/AdminPanel'));
 
 /** Opens the admin overlay when the /admin route mounts, rendering the given page behind it. */
 function AdminEntry({ onOpen, children }: { onOpen: () => void; children: ReactNode }) {
@@ -180,6 +184,13 @@ export default function App() {
       />
 
       <main className="flex-1 pb-12">
+        <Suspense
+          fallback={
+            <div className="flex items-center justify-center py-32">
+              <div className="w-8 h-8 border-2 border-[#E6B579]/30 border-t-[#E6B579] rounded-full animate-spin" />
+            </div>
+          }
+        >
         <Routes>
           <Route
             path="/"
@@ -225,6 +236,7 @@ export default function App() {
           />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        </Suspense>
       </main>
 
       <Footer onOpenAdmin={() => setAdminOpen(true)} />
@@ -245,13 +257,15 @@ export default function App() {
 
       <AnimatePresence>
         {adminOpen && (
-          <AdminPanel
-            isOpen={adminOpen}
-            onClose={() => setAdminOpen(false)}
-            products={products}
-            config={storeConfig}
-            onSaveConfig={handleSaveConfigsFromServer}
-          />
+          <Suspense fallback={null}>
+            <AdminPanel
+              isOpen={adminOpen}
+              onClose={() => setAdminOpen(false)}
+              products={products}
+              config={storeConfig}
+              onSaveConfig={handleSaveConfigsFromServer}
+            />
+          </Suspense>
         )}
       </AnimatePresence>
 

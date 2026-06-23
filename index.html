@@ -4,7 +4,15 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Tanvir Attire | The Royal Heritage</title>
-    <script src="https://js.stripe.com/v3/"></script>
+
+    <!-- Warm up connections to third-party origins before they're needed (saves DNS+TLS round-trips) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="preconnect" href="https://images.unsplash.com" />
+    <link rel="dns-prefetch" href="https://js.stripe.com" />
+
+    <!-- Stripe.js loaded async so it never blocks first paint; it's only needed at checkout -->
+    <script src="https://js.stripe.com/v3/" async></script>
   </head>
   <body>
     <div id="root"></div>

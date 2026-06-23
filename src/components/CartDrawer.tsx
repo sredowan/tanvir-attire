@@ -286,6 +286,8 @@ export default function CartDrawer({
                             <img
                               src={item.product.images[0]}
                               alt={item.product.name}
+                              loading="lazy"
+                              decoding="async"
                               className="w-16 h-20 object-cover bg-teal-950 border border-[#E6B579]/10"
                             />
                             <div className="flex-1 flex flex-col justify-between">

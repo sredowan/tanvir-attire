@@ -126,6 +126,8 @@ function ProductDetail({
               src={product.images[activeImage] || product.images[0]}
               alt={product.name}
               referrerPolicy="no-referrer"
+              decoding="async"
+              fetchPriority="high"
               className="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-700"
             />
             {discount > 0 && (
@@ -153,7 +155,7 @@ function ProductDetail({
                     activeImage === i ? 'border-[#E6B579]' : 'border-[#E6B579]/15 hover:border-[#E6B579]/50'
                   }`}
                 >
-                  <img src={img} alt="" referrerPolicy="no-referrer" className="w-full h-full object-cover" />
+                  <img src={img} alt="" referrerPolicy="no-referrer" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                 </button>
               ))}
             </div>

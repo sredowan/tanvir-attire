@@ -18,6 +18,8 @@ export default function LegacyPage() {
           src="https://images.unsplash.com/photo-1618220179428-22790b461013?auto=format&fit=crop&w=1200&q=80"
           alt="Bespoke Design Studio"
           referrerPolicy="no-referrer"
+          loading="lazy"
+          decoding="async"
           className="w-full h-full object-cover opacity-50"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-[#06211E] via-transparent to-[#06211E]/30" />

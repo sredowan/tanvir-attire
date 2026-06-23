@@ -18,5 +18,24 @@ export default defineConfig(() => {
       // Disable file watching when DISABLE_HMR is true to save CPU during agent edits.
       watch: process.env.DISABLE_HMR === 'true' ? null : {},
     },
+    build: {
+      // Modern browsers only → smaller, faster output with no legacy transpilation.
+      target: 'es2020',
+      cssCodeSplit: true,
+      // Split rarely-changing vendor libraries into their own long-cached chunks so a
+      // code change doesn't force users to re-download React/motion/etc.
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            'react-vendor': ['react', 'react-dom', 'react-router-dom'],
+            motion: ['motion'],
+            icons: ['lucide-react'],
+          },
+        },
+      },
+      // Skip the expensive gzip-size report during build.
+      reportCompressedSize: false,
+      chunkSizeWarningLimit: 1200,
+    },
   };
 });

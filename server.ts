@@ -20,7 +20,7 @@ import {
   recordWebhookEvent,
 } from './backend/store';
 import { getStripe } from './backend/payments';
-import { sendNewOrderEmail } from './backend/email';
+import { sendNewOrderEmail, sendOrderConfirmationEmail } from './backend/email';
 import { credentialsValid, issueToken, requireAdmin } from './backend/auth';
 
 dotenv.config();
@@ -65,6 +65,7 @@ app.post('/api/stripe-webhook', express.raw({ type: 'application/json' }), async
           if (updated) {
             await decrementStockForOrder(updated);
             await sendNewOrderEmail(updated);
+            await sendOrderConfirmationEmail(updated);
           }
         }
         break;

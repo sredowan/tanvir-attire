@@ -2,7 +2,7 @@ import { useState, useEffect, Fragment } from 'react';
 import { motion } from 'motion/react';
 import { X, Save, Plus, Trash2, Edit2, Key, Info, RefreshCw, CheckCircle, Package, Truck, Sliders, LayoutDashboard, ClipboardList, ChevronDown, AlertTriangle, Search, Image as ImageIcon, DollarSign, Upload, FolderPlus } from 'lucide-react';
 import { Product, ProductVariant, ShippingOption, StoreConfig, Order, OrderStatus } from '../types';
-import { slugify, totalStock, productSizes } from '../lib/products';
+import { slugify, totalStock, productSizes, normalizeProduct } from '../lib/products';
 import { getCategories } from '../lib/categories';
 
 interface AdminPanelProps {
@@ -128,6 +128,24 @@ export default function AdminPanel({
     }
   };
 
+  // Pull the authoritative catalogue straight from the server so the editor always
+  // works on live data — not the static fallback the parent may still be showing
+  // while its own fetch is in flight. Without this, opening /admin before the app's
+  // initial fetch resolves seeds the editor with stale data, and saving would
+  // overwrite the real catalogue.
+  const loadCatalogue = async () => {
+    try {
+      const res = await fetch('/api/ecommerce-config');
+      const data = await res.json();
+      if (data.success && Array.isArray(data.products)) {
+        setLocalProducts(data.products.map(normalizeProduct));
+        if (data.config) setLocalConfig(data.config);
+      }
+    } catch {
+      /* keep the props-seeded state as a fallback */
+    }
+  };
+
   const updateOrderStatus = async (orderId: string, status: OrderStatus) => {
     setUpdatingOrderId(orderId);
     try {
@@ -164,11 +182,12 @@ export default function AdminPanel({
     }
   }, [isOpen]);
 
-  // Load dashboard stats + orders once authenticated
+  // Load dashboard stats + orders + the live catalogue once authenticated
   useEffect(() => {
     if (isAuthenticated) {
       loadStats();
       loadOrders();
+      loadCatalogue();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated]);
@@ -685,12 +704,12 @@ export default function AdminPanel({
   );
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-[#03100e]/95 backdrop-blur-md flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-[#03100e]/95 backdrop-blur-md flex items-stretch justify-center p-0 sm:p-3 md:p-4">
       <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
+        initial={{ opacity: 0, scale: 0.98 }}
         animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0, scale: 0.95 }}
-        className="bg-[#06211E] border border-[#E6B579]/20 w-full max-w-5xl h-[88vh] flex flex-col justify-between shadow-2xl"
+        exit={{ opacity: 0, scale: 0.98 }}
+        className="bg-[#06211E] border border-[#E6B579]/20 w-full sm:max-w-[1700px] sm:w-[97vw] h-screen sm:h-[94vh] flex flex-col justify-between shadow-2xl"
       >
         
         {/* Top bar header */}
@@ -799,7 +818,7 @@ export default function AdminPanel({
                 </button>
               </div>
 
-              <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
                 {[
                   { label: 'Total Products', value: stats?.totalProducts ?? localProducts.length, icon: Package, accent: 'text-[#E6B579]' },
                   { label: 'Total Orders', value: stats?.totalOrders ?? 0, icon: ClipboardList, accent: 'text-white' },
@@ -1187,6 +1206,7 @@ export default function AdminPanel({
                               className="w-full bg-[#03100e] border border-[#E6B579]/20 p-1.5 text-xs text-[#E6B579] font-mono text-center"
                               value={p.price}
                               id={`price-edit-p-${p.id}`}
+                              onFocus={(e) => e.target.select()}
                               onChange={(e) => handleProductPriceChange(p.id, Number(e.target.value))}
                             />
                           </td>
@@ -1201,6 +1221,7 @@ export default function AdminPanel({
                                     className="w-10 bg-transparent text-[11px] text-white font-mono text-center focus:outline-none"
                                     value={v.stock}
                                     id={`stock-edit-p-${p.id}-${v.size}`}
+                                    onFocus={(e) => e.target.select()}
                                     onChange={(e) => handleVariantStockChange(p.id, v.size, Number(e.target.value))}
                                   />
                                 </label>
@@ -1419,6 +1440,7 @@ export default function AdminPanel({
                               className="w-full bg-[#03100e] border border-[#E6B579]/20 p-1.5 text-xs text-[#E6B579] font-mono text-center"
                               value={opt.price}
                               id={`price-edit-sh-${opt.id}`}
+                              onFocus={(e) => e.target.select()}
                               onChange={(e) => handleShippingPriceChange(opt.id, Number(e.target.value))}
                             />
                           </td>
@@ -1429,6 +1451,7 @@ export default function AdminPanel({
                               placeholder="Never Free"
                               value={opt.freeAboveAmount || ''}
                               id={`free-edit-sh-${opt.id}`}
+                              onFocus={(e) => e.target.select()}
                               onChange={(e) => handleShippingFreeThresholdChange(opt.id, e.target.value)}
                             />
                           </td>
@@ -1552,8 +1575,7 @@ export default function AdminPanel({
             <button
               id="admin-reset-panel"
               onClick={() => {
-                setLocalProducts(JSON.parse(JSON.stringify(products)));
-                setLocalConfig(JSON.parse(JSON.stringify(config)));
+                loadCatalogue();
                 setStatusMsg(null);
               }}
               className="px-4 py-3 border border-gray-700 hover:border-gray-500 hover:bg-white/5 text-gray-300 text-xs font-mono tracking-widest uppercase transition-all"

@@ -63,10 +63,6 @@ export default function HomePage({ products, config, isReady, dataError, onAddTo
           <h2 className="font-serif text-3xl sm:text-[44px] font-light text-white tracking-widest leading-none">
             THE SOVEREIGN WEAVES
           </h2>
-          <p className="text-xs text-gray-400 max-w-lg mx-auto font-sans leading-relaxed pt-2">
-            Handcrafted with traditional raw brocade and ultra-heavy organic materials tailored to withstand the
-            Australian climate with elegant structure.
-          </p>
         </div>
 
         <div className="flex justify-center items-center border-b border-[#E6B579]/10 pb-6 w-full">

@@ -1,5 +1,5 @@
 import { useState, useEffect, type ReactNode } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { Sparkles, Printer, CheckCircle2, X } from 'lucide-react';
 import { Product, StoreConfig, CartItem } from './types';
@@ -23,6 +23,13 @@ function AdminEntry({ onOpen, children }: { onOpen: () => void; children: ReactN
 }
 
 export default function App() {
+  const location = useLocation();
+
+  // Scroll to top on page transition
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [location.pathname]);
+
   // Dynamic business data from the backend
   const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
   const [storeConfig, setStoreConfig] = useState<StoreConfig>(INITIAL_STORE_CONFIG);

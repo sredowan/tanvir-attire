@@ -37,9 +37,8 @@ function orderHtml(order: Order): string {
   return `
   <div style="font-family:Arial,Helvetica,sans-serif;max-width:640px;margin:0 auto;color:#06211E;">
     <div style="background:#06211E;color:#E6B579;padding:32px;text-align:center;">
-      <img src="https://tanvirattire.com.au/logo.png" alt="Tanvir Attire Logo" style="height:48px;width:auto;margin-bottom:12px;display:inline-block;" />
-      <h1 style="margin:0;letter-spacing:3px;font-size:20px;font-weight:300;">TANVIR ATTIRE</h1>
-      <p style="margin:6px 0 0;font-size:12px;color:#cbb48f;">New Paid Order — ${order.referenceId}</p>
+      <img src="https://tanvirattire.com.au/logo.png" alt="Tanvir Attire Logo" style="height:48px;width:auto;margin-bottom:8px;display:inline-block;" />
+      <p style="margin:0;font-size:12px;color:#cbb48f;">New Paid Order — ${order.referenceId}</p>
     </div>
     <div style="padding:24px;border:1px solid #eee;border-top:none;">
       <p style="font-size:14px;">A new order has been <strong>paid</strong> and is ready to fulfil.</p>
@@ -90,9 +89,8 @@ function customerOrderHtml(order: Order): string {
   return `
   <div style="font-family:Arial,Helvetica,sans-serif;max-width:640px;margin:0 auto;color:#06211E;">
     <div style="background:#06211E;color:#E6B579;padding:32px;text-align:center;">
-      <img src="https://tanvirattire.com.au/logo.png" alt="Tanvir Attire Logo" style="height:48px;width:auto;margin-bottom:12px;display:inline-block;" />
-      <h1 style="margin:0;letter-spacing:3px;font-size:22px;font-weight:300;">TANVIR ATTIRE</h1>
-      <p style="margin:8px 0 0;font-size:12px;color:#cbb48f;letter-spacing:1px;text-transform:uppercase;">Order Confirmation</p>
+      <img src="https://tanvirattire.com.au/logo.png" alt="Tanvir Attire Logo" style="height:48px;width:auto;margin-bottom:8px;display:inline-block;" />
+      <p style="margin:0;font-size:12px;color:#cbb48f;letter-spacing:1px;text-transform:uppercase;">Order Confirmation</p>
     </div>
     <div style="padding:24px;border:1px solid #eee;border-top:none;background-color:#ffffff;">
       <p style="font-size:14px;line-height:1.6;color:#333;">Dear ${order.customerName || 'Valued Client'},</p>
@@ -207,9 +205,8 @@ function orderUpdateHtml(order: Order): string {
   return `
   <div style="font-family:Arial,Helvetica,sans-serif;max-width:640px;margin:0 auto;color:#06211E;">
     <div style="background:#06211E;color:#E6B579;padding:32px;text-align:center;">
-      <img src="https://tanvirattire.com.au/logo.png" alt="Tanvir Attire Logo" style="height:48px;width:auto;margin-bottom:12px;display:inline-block;" />
-      <h1 style="margin:0;letter-spacing:3px;font-size:22px;font-weight:300;">TANVIR ATTIRE</h1>
-      <p style="margin:8px 0 0;font-size:12px;color:#cbb48f;letter-spacing:1px;text-transform:uppercase;">Order Status Update</p>
+      <img src="https://tanvirattire.com.au/logo.png" alt="Tanvir Attire Logo" style="height:48px;width:auto;margin-bottom:8px;display:inline-block;" />
+      <p style="margin:0;font-size:12px;color:#cbb48f;letter-spacing:1px;text-transform:uppercase;">Order Status Update</p>
     </div>
     <div style="padding:24px;border:1px solid #eee;border-top:none;background-color:#ffffff;">
       <p style="font-size:14px;line-height:1.6;color:#333;">Dear ${order.customerName || 'Valued Client'},</p>

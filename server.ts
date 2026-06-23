@@ -20,7 +20,7 @@ import {
   recordWebhookEvent,
 } from './backend/store';
 import { getStripe } from './backend/payments';
-import { sendNewOrderEmail, sendOrderConfirmationEmail } from './backend/email';
+import { sendNewOrderEmail, sendOrderConfirmationEmail, sendOrderStatusUpdateEmail } from './backend/email';
 import { credentialsValid, issueToken, requireAdmin } from './backend/auth';
 
 dotenv.config();
@@ -212,6 +212,10 @@ app.post('/api/admin/orders/:id/status', requireAdmin, async (req, res) => {
   try {
     const updated = await setOrderStatus({ id: req.params.id, status });
     if (!updated) return res.status(404).json({ success: false, message: 'Order not found.' });
+    
+    // Notify customer of manual order update
+    await sendOrderStatusUpdateEmail(updated);
+    
     res.json({ success: true, order: updated });
   } catch (err: any) {
     console.error('[orders] status update error:', err);

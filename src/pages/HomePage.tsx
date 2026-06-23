@@ -20,8 +20,12 @@ export default function HomePage({ products, config, isReady, dataError, onAddTo
 
   const openDetails = (p: Product) => navigate(`/products/${p.slug}`);
 
-  // Only show category tabs that actually have visible products.
-  const visibleProducts = products.filter(isVisible);
+  // Only show category tabs that actually have visible products. Sort to show kurta first.
+  const visibleProducts = products.filter(isVisible).sort((a, b) => {
+    if (a.category === 'kurta' && b.category !== 'kurta') return -1;
+    if (a.category !== 'kurta' && b.category === 'kurta') return 1;
+    return 0;
+  });
   const categories = getCategories(config).filter((c) => visibleProducts.some((p) => p.category === c.value));
 
   const filteredProducts = visibleProducts.filter((p) => {

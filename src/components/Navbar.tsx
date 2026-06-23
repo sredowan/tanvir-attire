@@ -93,7 +93,7 @@ export default function Navbar({ config, cartCount, onOpenCart, onOpenAdmin }: N
             <button
               id="admin-portal-trigger"
               onClick={onOpenAdmin}
-              className="p-2.5 text-gray-400 hover:text-[#E6B579] hover:bg-[#E6B579]/5 rounded-full transition-all focus:outline-none border border-transparent hover:border-[#E6B579]/10"
+              className="hidden lg:inline-flex p-2.5 text-gray-400 hover:text-[#E6B579] hover:bg-[#E6B579]/5 rounded-full transition-all focus:outline-none border border-transparent hover:border-[#E6B579]/10"
               title="Tanvir Management Portal"
             >
               <Settings className="w-5 h-5 animate-spin-hover" />

@@ -82,22 +82,6 @@ export default function Navbar({ config, cartCount, onOpenCart, onOpenAdmin }: N
 
           {/* System Control Options */}
           <div className="flex items-center space-x-6">
-            
-            {/* Australian Operations Badge */}
-            <div className="hidden sm:flex items-center space-x-1.5 px-3 py-1 bg-emerald-950/40 border border-emerald-500/20 rounded-full text-[10px] text-emerald-400 font-mono tracking-wider uppercase">
-              <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse-slow"></span>
-              <span>AU Hub (GST Incl.)</span>
-            </div>
-
-            {/* Admin Dashboard Quick Action Button */}
-            <button
-              id="admin-portal-trigger"
-              onClick={onOpenAdmin}
-              className="hidden lg:inline-flex p-2.5 text-gray-400 hover:text-[#E6B579] hover:bg-[#E6B579]/5 rounded-full transition-all focus:outline-none border border-transparent hover:border-[#E6B579]/10"
-              title="Tanvir Management Portal"
-            >
-              <Settings className="w-5 h-5 animate-spin-hover" />
-            </button>
 
             {/* Shopping Cart Trigger */}
             <button

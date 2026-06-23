@@ -27,6 +27,7 @@ export default function CartDrawer({
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerAddress, setCustomerAddress] = useState('');
+  const [customerPostcode, setCustomerPostcode] = useState('');
   const [customerEmail, setCustomerEmail] = useState('');
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [checkoutError, setCheckoutError] = useState('');
@@ -82,6 +83,7 @@ export default function CartDrawer({
       const stripe = (window as any).Stripe(pubKey);
       const elements = stripe.elements();
       const card = elements.create('card', {
+        hidePostalCode: true,
         style: {
           base: {
             color: '#ffffff',
@@ -122,8 +124,13 @@ export default function CartDrawer({
   const handleSecurityCheckout = async () => {
     if (cartItems.length === 0) return;
 
-    if (!customerName.trim() || !customerPhone.trim() || !customerAddress.trim()) {
-      setCheckoutError('Please provide Name, Phone, and Delivery Address.');
+    if (!customerName.trim() || !customerPhone.trim() || !customerAddress.trim() || !customerPostcode.trim()) {
+      setCheckoutError('Please provide Name, Phone, Street Address, and Postcode.');
+      return;
+    }
+
+    if (!/^\d{4}$/.test(customerPostcode.trim())) {
+      setCheckoutError('Please enter a valid 4-digit Australian postcode.');
       return;
     }
 
@@ -131,6 +138,7 @@ export default function CartDrawer({
     setCheckoutLoading(true);
 
     try {
+      const fullAddress = `${customerAddress.trim()}, ${customerPostcode.trim()}`;
       const response = await fetch('/api/create-payment-intent', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -138,7 +146,7 @@ export default function CartDrawer({
           cartItems,
           customerName: customerName.trim(),
           customerPhone: customerPhone.trim(),
-          customerAddress: customerAddress.trim(),
+          customerAddress: fullAddress,
           customerEmail: customerEmail.trim() || undefined
         })
       });
@@ -182,7 +190,8 @@ export default function CartDrawer({
             phone: customerPhone.trim(),
             email: customerEmail.trim() || undefined,
             address: {
-              line1: customerAddress.trim()
+              line1: customerAddress.trim(),
+              postal_code: customerPostcode.trim()
             }
           }
         }
@@ -367,15 +376,34 @@ export default function CartDrawer({
 
                           <div>
                             <label className="block text-[9px] font-mono text-gray-400 uppercase tracking-wider mb-1">
-                              Delivery Address *
+                              Street Address *
                             </label>
                             <textarea
                               required
                               rows={2}
-                              placeholder="e.g. Suite 10, 100 Collins St, Melbourne VIC 3000"
+                              placeholder="e.g. Suite 10, 100 Collins St, Melbourne VIC"
                               value={customerAddress}
                               onChange={(e) => setCustomerAddress(e.target.value)}
                               className="w-full bg-[#06211E] border border-[#E6B579]/20 text-xs px-3 py-1.5 text-white placeholder-gray-600 focus:outline-none focus:border-[#E6B579] rounded-none font-sans resize-none"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-[9px] font-mono text-gray-400 uppercase tracking-wider mb-1">
+                              Postcode (4-digit AU) *
+                            </label>
+                            <input
+                              type="text"
+                              required
+                              maxLength={4}
+                              placeholder="e.g. 3000"
+                              value={customerPostcode}
+                              onChange={(e) => {
+                                // Only allow numeric inputs up to 4 digits
+                                const val = e.target.value.replace(/\D/g, '');
+                                setCustomerPostcode(val);
+                              }}
+                              className="w-full bg-[#06211E] border border-[#E6B579]/20 text-xs px-3 py-1.5 text-white placeholder-gray-600 focus:outline-none focus:border-[#E6B579] rounded-none font-sans"
                             />
                           </div>
 
@@ -426,7 +454,9 @@ export default function CartDrawer({
                           </div>
                           <div className="flex justify-between">
                             <span>Delivery Destination:</span>
-                            <span className="text-white font-bold text-right max-w-[200px] truncate">{customerAddress}</span>
+                            <span className="text-white font-bold text-right max-w-[200px] truncate">
+                              {customerAddress}, {customerPostcode}
+                            </span>
                           </div>
                         </div>
 
@@ -532,12 +562,6 @@ export default function CartDrawer({
                   </button>
                 )}
 
-                <div className="flex items-center justify-center gap-2">
-                  <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full"></span>
-                  <span className="text-[8px] text-gray-400 uppercase tracking-widest font-mono">
-                    Official Australian Gateway (AUD) Verified
-                  </span>
-                </div>
               </div>
             )}
 

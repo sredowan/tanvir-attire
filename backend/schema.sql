@@ -59,6 +59,8 @@ CREATE TABLE IF NOT EXISTS orders (
   customer_phone   VARCHAR(64)  NULL,
   customer_address TEXT NULL,
   payment_intent_id VARCHAR(190) NULL,
+  tracking_number  VARCHAR(120) NULL,
+  tracking_status  VARCHAR(40)  NULL,
   created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uniq_reference (reference_id),

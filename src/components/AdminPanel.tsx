@@ -1,7 +1,7 @@
 import { useState, useEffect, Fragment } from 'react';
 import { motion } from 'motion/react';
 import { X, Save, Plus, Trash2, Edit2, Key, Info, RefreshCw, CheckCircle, Package, Truck, Sliders, LayoutDashboard, ClipboardList, ChevronDown, AlertTriangle, Search, Image as ImageIcon, DollarSign, Upload, FolderPlus, Star, BadgeCheck, MessageSquare, EyeOff, Eye } from 'lucide-react';
-import { Product, ProductVariant, ShippingOption, StoreConfig, Order, OrderStatus, Review, ReviewStatus } from '../types';
+import { Product, ProductVariant, ShippingOption, StoreConfig, Order, OrderStatus, Review, ReviewStatus, FULFILMENT_STATUSES } from '../types';
 import { slugify, totalStock, productSizes, normalizeProduct } from '../lib/products';
 import { getCategories } from '../lib/categories';
 
@@ -209,6 +209,37 @@ export default function AdminPanel({
       /* ignore */
     } finally {
       setReviewBusyId(null);
+    }
+  };
+
+  // Order tracking (Australia Post) editor
+  const [trackingBusyId, setTrackingBusyId] = useState<string | null>(null);
+  const [trackingNotify, setTrackingNotify] = useState(true);
+
+  const updateOrderTrackingField = (orderId: string, patch: Partial<Order>) => {
+    setOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, ...patch } : o)));
+  };
+
+  const saveOrderTracking = async (order: Order) => {
+    setTrackingBusyId(order.id);
+    try {
+      const res = await authFetch(`/api/admin/orders/${order.id}/tracking`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          trackingNumber: order.trackingNumber || '',
+          trackingStatus: order.trackingStatus || '',
+          notify: trackingNotify,
+        }),
+      });
+      const data = await res.json();
+      if (data.success && data.order) {
+        setOrders((prev) => prev.map((o) => (o.id === order.id ? data.order : o)));
+      }
+    } catch {
+      /* ignore */
+    } finally {
+      setTrackingBusyId(null);
     }
   };
 
@@ -1079,6 +1110,45 @@ export default function AdminPanel({
                                   </button>
                                 ))}
                                 <span className="ml-auto font-mono text-sm text-[#E6B579] font-bold">${o.total.toFixed(2)} AUD</span>
+                              </div>
+
+                              {/* Australia Post tracking editor */}
+                              <div className="border border-[#E6B579]/15 bg-[#03100e] p-3 space-y-3">
+                                <span className="text-[9px] text-gray-500 uppercase tracking-widest font-mono flex items-center gap-1.5">
+                                  <Truck className="w-3.5 h-3.5 text-[#E6B579]" /> Australia Post Tracking
+                                </span>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                  <input
+                                    placeholder="Tracking number (e.g. 33ABC123456789)"
+                                    className="bg-[#06211E] border border-[#E6B579]/20 p-2 text-xs text-white placeholder-gray-600 focus:outline-none focus:border-[#E6B579] font-mono"
+                                    value={o.trackingNumber || ''}
+                                    onChange={(e) => updateOrderTrackingField(o.id, { trackingNumber: e.target.value })}
+                                  />
+                                  <select
+                                    className="bg-[#06211E] border border-[#E6B579]/20 p-2 text-xs text-white focus:outline-none focus:border-[#E6B579] font-mono"
+                                    value={o.trackingStatus || ''}
+                                    onChange={(e) => updateOrderTrackingField(o.id, { trackingStatus: e.target.value })}
+                                  >
+                                    <option value="">— Delivery stage —</option>
+                                    {FULFILMENT_STATUSES.map((s) => (
+                                      <option key={s} value={s}>{s}</option>
+                                    ))}
+                                  </select>
+                                </div>
+                                <div className="flex items-center justify-between flex-wrap gap-2">
+                                  <label className="flex items-center gap-1.5 text-[9px] font-mono uppercase tracking-wider text-gray-400 cursor-pointer">
+                                    <input type="checkbox" checked={trackingNotify} onChange={(e) => setTrackingNotify(e.target.checked)} className="accent-[#E6B579]" />
+                                    Email customer on save
+                                  </label>
+                                  <button
+                                    disabled={trackingBusyId === o.id}
+                                    onClick={() => saveOrderTracking(o)}
+                                    className="px-4 py-1.5 text-[10px] font-mono uppercase tracking-widest bg-[#E6B579] text-[#06211E] font-bold hover:bg-white transition-all flex items-center gap-1.5 disabled:opacity-50"
+                                  >
+                                    {trackingBusyId === o.id ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                                    Save tracking
+                                  </button>
+                                </div>
                               </div>
                             </div>
                           )}

@@ -15,6 +15,7 @@ import HomePage from './pages/HomePage';
 // else (legacy story, product detail, the large admin dashboard) loads on demand.
 const LegacyPage = lazy(() => import('./pages/LegacyPage'));
 const ProductDetailPage = lazy(() => import('./pages/ProductDetailPage'));
+const TrackingPage = lazy(() => import('./pages/TrackingPage'));
 const AdminPanel = lazy(() => import('./components/AdminPanel'));
 
 /** Opens the admin overlay when the /admin route mounts, rendering the given page behind it. */
@@ -205,6 +206,7 @@ export default function App() {
             }
           />
           <Route path="/legacy" element={<LegacyPage />} />
+          <Route path="/track-order" element={<TrackingPage />} />
           <Route
             path="/products/:slug"
             element={
@@ -239,7 +241,7 @@ export default function App() {
         </Suspense>
       </main>
 
-      <Footer onOpenAdmin={() => setAdminOpen(true)} />
+      <Footer />
 
       <CartDrawer
         isOpen={cartOpen}

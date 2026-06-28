@@ -94,6 +94,10 @@ export interface CartItem {
 
 export type OrderStatus = 'Pending' | 'Paid' | 'Failed' | 'Cancelled' | 'Refunded';
 
+/** Australia Post fulfilment stages, maintained by the admin and shown on the tracking page. */
+export const FULFILMENT_STATUSES = ['Preparing', 'Shipped', 'In Transit', 'Out for Delivery', 'Delivered'] as const;
+export type FulfilmentStatus = (typeof FULFILMENT_STATUSES)[number];
+
 export interface OrderItem {
   productId: string;
   name: string;
@@ -120,6 +124,8 @@ export interface Order {
   customerPhone: string;
   customerAddress: string;
   paymentIntentId?: string;
+  trackingNumber?: string;   // Australia Post consignment / tracking id (set by admin)
+  trackingStatus?: string;   // FulfilmentStatus — current delivery stage (set by admin)
   createdAt: string;
   updatedAt?: string;
 }

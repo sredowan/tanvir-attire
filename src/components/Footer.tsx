@@ -1,11 +1,8 @@
-import { Shield, CreditCard, MapPin, Phone, Mail, Truck, RefreshCw } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Shield, MapPin, Phone, Mail, Truck, RefreshCw } from 'lucide-react';
 import logo from '../assets/logo.png';
 
-interface FooterProps {
-  onOpenAdmin: () => void;
-}
-
-export default function Footer({ onOpenAdmin }: FooterProps) {
+export default function Footer() {
   return (
     <footer id="boutique-footer" className="bg-[#03100e] border-t border-[#E6B579]/10 text-gray-400 font-sans">
       
@@ -48,9 +45,8 @@ export default function Footer({ onOpenAdmin }: FooterProps) {
           <div className="space-y-4 md:pl-6">
             <h4 className="font-serif text-xs tracking-widest text-[#E6B579] uppercase">The Boutique</h4>
             <ul className="space-y-2.5 text-xs font-light text-gray-400">
-              <li><span className="hover:text-white cursor-pointer transition-colors">The Legacy Story</span></li>
-              <li><span className="hover:text-white cursor-pointer transition-colors">Australia Post Tracking</span></li>
-              <li><button onClick={onOpenAdmin} className="hover:text-white text-[#E6B579] underline transition-colors cursor-pointer font-bold uppercase text-[9px] tracking-widest font-mono">Management Dashboard</button></li>
+              <li><Link to="/legacy" className="hover:text-white cursor-pointer transition-colors">The Legacy Story</Link></li>
+              <li><Link to="/track-order" className="hover:text-white cursor-pointer transition-colors">Track Your Order</Link></li>
             </ul>
           </div>
 
@@ -75,13 +71,9 @@ export default function Footer({ onOpenAdmin }: FooterProps) {
 
         </div>
 
-        {/* Lower copy and payment details */}
+        {/* Lower copy */}
         <div className="border-t border-white/5 mt-10 pt-6 flex flex-col md:flex-row items-center justify-between text-[10px] text-gray-500 gap-4">
           <p>© {new Date().getFullYear()} Tanvir Attire Australia. ABN 66 355 065 231. Built for Royal Comfort.</p>
-          <div className="flex items-center gap-2 font-mono text-[9px] text-[#E6B579]/40 select-none">
-            <CreditCard className="w-3.5 h-3.5 shrink-0" />
-            <span>Stripe Certified • Visa • Mastercard • AMEX • Apple Pay • GPay</span>
-          </div>
         </div>
 
       </div>

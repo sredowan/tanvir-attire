@@ -20,6 +20,16 @@ function money(n: number, currency: string): string {
   return `$${n.toFixed(2)} ${currency}`;
 }
 
+/** A centred "Track Your Order" call-to-action button linking to the public tracking page. */
+function trackOrderButton(): string {
+  const url = `${ENV.SITE_URL}/track-order`;
+  return `
+      <div style="text-align:center;margin:28px 0 8px;">
+        <a href="${url}" style="display:inline-block;background:#E6B579;color:#06211E;text-decoration:none;font-weight:bold;font-size:13px;letter-spacing:1px;text-transform:uppercase;padding:14px 32px;border-radius:2px;">Track Your Order</a>
+        <p style="margin:10px 0 0;font-size:11px;color:#888;">Enter the phone number from your order to see live delivery status.</p>
+      </div>`;
+}
+
 function orderHtml(order: Order): string {
   const rows = order.items
     .map(
@@ -124,6 +134,8 @@ function customerOrderHtml(order: Order): string {
         <tr><td style="padding:8px 0;font-weight:bold;font-size:15px;border-top:2px solid #06211E;color:#06211E;">Total Paid</td><td style="text-align:right;font-weight:bold;font-size:15px;border-top:2px solid #06211E;color:#06211E;">${money(order.total, order.currency)}</td></tr>
       </table>
 
+      ${trackOrderButton()}
+
       <div style="margin-top:32px;border-top:1px solid #eee;padding-top:16px;font-size:11px;color:#666;text-align:center;">
         <p>If you have any questions, please contact our support team at <a href="mailto:info@tanvirattire.com.au" style="color:#E6B579;text-decoration:none;">info@tanvirattire.com.au</a> or call +61 491 143 581.</p>
         <p style="margin-top:8px;">&copy; ${new Date().getFullYear()} Tanvir Attire. All rights reserved.</p>
@@ -218,6 +230,8 @@ function orderUpdateHtml(order: Order): string {
         <p style="margin:4px 0;font-size:13px;color:#444;"><strong>Recipient:</strong> ${order.customerName}</p>
         <p style="margin:4px 0;font-size:13px;color:#444;"><strong>Address:</strong> ${(order.customerAddress || '—').replace(/\n/g, '<br>')}</p>
         <p style="margin:4px 0;font-size:13px;color:#444;"><strong>Phone:</strong> ${order.customerPhone}</p>
+        ${order.trackingStatus ? `<p style="margin:4px 0;font-size:13px;color:#444;"><strong>Delivery stage:</strong> ${order.trackingStatus}</p>` : ''}
+        ${order.trackingNumber ? `<p style="margin:4px 0;font-size:13px;color:#444;"><strong>AusPost tracking:</strong> ${order.trackingNumber}</p>` : ''}
       </div>
 
       <table style="width:100%;border-collapse:collapse;font-size:13px;">
@@ -239,6 +253,8 @@ function orderUpdateHtml(order: Order): string {
         <tr><td style="padding:4px 0;color:#666;">GST included (10%)</td><td style="text-align:right;">${money(order.gstIncluded, order.currency)}</td></tr>
         <tr><td style="padding:8px 0;font-weight:bold;font-size:15px;border-top:2px solid #06211E;color:#06211E;">Total Paid</td><td style="text-align:right;font-weight:bold;font-size:15px;border-top:2px solid #06211E;color:#06211E;">${money(order.total, order.currency)}</td></tr>
       </table>
+
+      ${trackOrderButton()}
 
       <div style="margin-top:32px;border-top:1px solid #eee;padding-top:16px;font-size:11px;color:#666;text-align:center;">
         <p>If you have any questions, please contact our support team at <a href="mailto:info@tanvirattire.com.au" style="color:#E6B579;text-decoration:none;">info@tanvirattire.com.au</a> or call +61 491 143 581.</p>

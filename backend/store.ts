@@ -138,12 +138,17 @@ export async function ensureSeeded(): Promise<void> {
   }
 
   // Idempotent migrations for databases created before these features existed.
-  try {
-    await pool.query('ALTER TABLE product_variants ADD COLUMN sold_out TINYINT(1) NOT NULL DEFAULT 0');
-  } catch (err: any) {
-    // ER_DUP_FIELDNAME (1060) — column already present; ignore.
-    if (err?.errno !== 1060) console.warn('[store] sold_out migration:', err?.message || err);
-  }
+  const addColumn = async (sql: string, label: string) => {
+    try {
+      await pool.query(sql);
+    } catch (err: any) {
+      // ER_DUP_FIELDNAME (1060) — column already present; ignore.
+      if (err?.errno !== 1060) console.warn(`[store] ${label} migration:`, err?.message || err);
+    }
+  };
+  await addColumn('ALTER TABLE product_variants ADD COLUMN sold_out TINYINT(1) NOT NULL DEFAULT 0', 'sold_out');
+  await addColumn('ALTER TABLE orders ADD COLUMN tracking_number VARCHAR(120) NULL', 'tracking_number');
+  await addColumn('ALTER TABLE orders ADD COLUMN tracking_status VARCHAR(40) NULL', 'tracking_status');
   await pool.query(
     `CREATE TABLE IF NOT EXISTS reviews (
       id         VARCHAR(64)  NOT NULL PRIMARY KEY,
@@ -360,6 +365,8 @@ async function hydrateOrder(row: any): Promise<Order> {
     customerPhone: row.customer_phone,
     customerAddress: row.customer_address,
     paymentIntentId: row.payment_intent_id || undefined,
+    trackingNumber: row.tracking_number || undefined,
+    trackingStatus: row.tracking_status || undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     items: items.map((it) => ({
@@ -407,6 +414,61 @@ export async function setOrderStatus(opts: { id?: string; paymentIntentId?: stri
   await pool.query('UPDATE orders SET status = ? WHERE id = ?', [opts.status, opts.id]);
   const [rows] = await pool.query<any[]>('SELECT * FROM orders WHERE id = ? LIMIT 1', [opts.id]);
   return rows.length ? hydrateOrder(rows[0]) : null;
+}
+
+/** Set (or clear) the Australia Post tracking number + delivery stage for an order. */
+export async function updateOrderTracking(
+  id: string,
+  opts: { trackingNumber?: string; trackingStatus?: string }
+): Promise<Order | null> {
+  const trackingNumber = opts.trackingNumber?.trim() || null;
+  const trackingStatus = opts.trackingStatus?.trim() || null;
+  if (!isDbConfigured()) {
+    const s = readJsonStore();
+    const o = s.orders.find((x) => x.id === id);
+    if (!o) return null;
+    o.trackingNumber = trackingNumber || undefined;
+    o.trackingStatus = trackingStatus || undefined;
+    o.updatedAt = new Date().toISOString();
+    writeJsonStore(s);
+    return o;
+  }
+  const pool = getPool()!;
+  await pool.query('UPDATE orders SET tracking_number = ?, tracking_status = ? WHERE id = ?', [
+    trackingNumber,
+    trackingStatus,
+    id,
+  ]);
+  const [rows] = await pool.query<any[]>('SELECT * FROM orders WHERE id = ? LIMIT 1', [id]);
+  return rows.length ? hydrateOrder(rows[0]) : null;
+}
+
+/** Reduce a phone number to comparable digits. */
+function normalizePhone(phone: string): string {
+  return (phone || '').replace(/\D/g, '');
+}
+
+/** Loose phone match tolerant of +61 / 0 prefixes and spacing — compares trailing digits. */
+function phoneMatches(stored: string, targetDigits: string): boolean {
+  const s = normalizePhone(stored);
+  if (!s || targetDigits.length < 6) return false;
+  const a = s.slice(-9);
+  const b = targetDigits.slice(-9);
+  return a === b || s.endsWith(targetDigits) || targetDigits.endsWith(s);
+}
+
+/** All orders whose customer phone matches the supplied number (newest first). */
+export async function listOrdersByPhone(phone: string): Promise<Order[]> {
+  const target = normalizePhone(phone);
+  if (target.length < 6) return [];
+  if (!isDbConfigured()) {
+    const s = readJsonStore();
+    return s.orders.filter((o) => phoneMatches(o.customerPhone, target));
+  }
+  const pool = getPool()!;
+  const [rows] = await pool.query<any[]>('SELECT * FROM orders ORDER BY created_at DESC');
+  const matched = rows.filter((r) => phoneMatches(r.customer_phone, target));
+  return Promise.all(matched.map(hydrateOrder));
 }
 
 /** Decrement per-size stock for each line item of a paid order.

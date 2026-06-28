@@ -5,6 +5,7 @@ import multer from 'multer';
 import { createServer as createViteServer } from 'vite';
 import dotenv from 'dotenv';
 import type { Order, OrderItem, OrderStatus, Product, StoreConfig, Review, ReviewStatus } from './src/types';
+import { FULFILMENT_STATUSES } from './src/types';
 import { effectivePrice, variantForSize } from './src/lib/products';
 import { ENV, isStripeConfigured, isDbConfigured, isSmtpConfigured } from './backend/env';
 import { pingDb } from './backend/db';
@@ -16,6 +17,8 @@ import {
   getOrderByPaymentIntent,
   listOrders,
   setOrderStatus,
+  updateOrderTracking,
+  listOrdersByPhone,
   decrementStockForOrder,
   recordWebhookEvent,
   listReviews,
@@ -228,11 +231,31 @@ app.post('/api/admin/orders/:id/status', requireAdmin, async (req, res) => {
     
     // Notify customer of manual order update
     await sendOrderStatusUpdateEmail(updated);
-    
+
     res.json({ success: true, order: updated });
   } catch (err: any) {
     console.error('[orders] status update error:', err);
     res.status(500).json({ success: false, message: 'Failed to update order.' });
+  }
+});
+
+// Admin: set an order's Australia Post tracking number + delivery stage
+app.post('/api/admin/orders/:id/tracking', requireAdmin, async (req, res) => {
+  const { trackingNumber, trackingStatus, notify } = req.body || {};
+  if (trackingStatus && !FULFILMENT_STATUSES.includes(trackingStatus)) {
+    return res.status(400).json({ success: false, message: 'Invalid tracking status.' });
+  }
+  try {
+    const updated = await updateOrderTracking(req.params.id, { trackingNumber, trackingStatus });
+    if (!updated) return res.status(404).json({ success: false, message: 'Order not found.' });
+
+    // Optionally email the customer their new delivery status / tracking number.
+    if (notify) await sendOrderStatusUpdateEmail(updated);
+
+    res.json({ success: true, order: updated });
+  } catch (err: any) {
+    console.error('[orders] tracking update error:', err);
+    res.status(500).json({ success: false, message: 'Failed to update tracking.' });
   }
 });
 
@@ -248,6 +271,35 @@ app.get('/api/order-status', async (req, res) => {
     res.json({ success: true, status: order.status, referenceId: order.referenceId });
   } catch (err: any) {
     res.status(500).json({ success: false, message: 'Lookup failed.' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Public: order tracking by phone number (customer-facing "Track Your Order")
+// ---------------------------------------------------------------------------
+app.get('/api/track', async (req, res) => {
+  const phone = String(req.query.phone || '').trim();
+  if (phone.replace(/\D/g, '').length < 6) {
+    return res.status(400).json({ success: false, message: 'Please enter the phone number used on your order.' });
+  }
+  try {
+    const orders = await listOrdersByPhone(phone);
+    // Only expose what a customer needs — never the email, address or payment ids.
+    const sanitized = orders.map((o) => ({
+      referenceId: o.referenceId,
+      status: o.status,
+      trackingNumber: o.trackingNumber || null,
+      trackingStatus: o.trackingStatus || null,
+      shippingMethod: o.shippingMethod,
+      total: o.total,
+      currency: o.currency,
+      createdAt: o.createdAt,
+      items: o.items.map((it) => ({ name: it.name, size: it.size, quantity: it.quantity })),
+    }));
+    res.json({ success: true, orders: sanitized });
+  } catch (err: any) {
+    console.error('[track] lookup error:', err);
+    res.status(500).json({ success: false, message: 'Could not look up your orders right now.' });
   }
 });
 

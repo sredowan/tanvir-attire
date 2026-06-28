@@ -9,6 +9,9 @@ export const ENV = {
   PORT: Number(process.env.PORT) || 3000,
   NODE_ENV: process.env.NODE_ENV || 'development',
 
+  // Public site origin, used to build absolute links in emails (e.g. order tracking).
+  SITE_URL: (process.env.SITE_URL || 'https://tanvirattire.com.au').replace(/\/+$/, ''),
+
   // --- MySQL (Hostinger remote DB). When DB_HOST is empty the app falls back
   // to a local JSON file store so dev works without a database. ---
   DB_HOST: process.env.DB_HOST || '',

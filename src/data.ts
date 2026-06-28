@@ -200,6 +200,7 @@ export const INITIAL_STORE_CONFIG: StoreConfig = {
   storeName: 'Tanvir Attire',
   currency: 'AUD',
   stripeEnabled: true,
+  reviewsEnabled: true,
   shippingChargeOptions: INITIAL_SHIPPING_OPTIONS,
   allowInternationalShipping: true,
   internationalShippingFee: 35.0,

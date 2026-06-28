@@ -4,7 +4,7 @@ import fs from 'fs';
 import multer from 'multer';
 import { createServer as createViteServer } from 'vite';
 import dotenv from 'dotenv';
-import type { Order, OrderItem, OrderStatus, Product, StoreConfig } from './src/types';
+import type { Order, OrderItem, OrderStatus, Product, StoreConfig, Review, ReviewStatus } from './src/types';
 import { effectivePrice, variantForSize } from './src/lib/products';
 import { ENV, isStripeConfigured, isDbConfigured, isSmtpConfigured } from './backend/env';
 import { pingDb } from './backend/db';
@@ -18,6 +18,11 @@ import {
   setOrderStatus,
   decrementStockForOrder,
   recordWebhookEvent,
+  listReviews,
+  createReview,
+  setReviewStatus,
+  setReviewVerified,
+  deleteReview,
 } from './backend/store';
 import { getStripe } from './backend/payments';
 import { sendNewOrderEmail, sendOrderConfirmationEmail, sendOrderStatusUpdateEmail } from './backend/email';
@@ -116,6 +121,14 @@ const uploader = multer({
 });
 
 app.post('/api/admin/upload', requireAdmin, uploader.single('file'), (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ success: false, message: 'No image file received (must be an image under 8MB).' });
+  }
+  res.json({ success: true, url: `/uploads/${req.file.filename}` });
+});
+
+// Public: photo upload for customer reviews. Returns a relative URL the review form attaches.
+app.post('/api/reviews/upload', uploader.single('file'), (req, res) => {
   if (!req.file) {
     return res.status(400).json({ success: false, message: 'No image file received (must be an image under 8MB).' });
   }
@@ -239,6 +252,117 @@ app.get('/api/order-status', async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
+// Public: product reviews (approved only) + summary
+// ---------------------------------------------------------------------------
+app.get('/api/reviews', async (req, res) => {
+  const productId = (req.query.productId as string) || undefined;
+  try {
+    const { config } = await getCatalogue();
+    const enabled = config?.reviewsEnabled !== false; // default on
+    if (!enabled) {
+      return res.json({ success: true, enabled: false, reviews: [], summary: { count: 0, average: 0 } });
+    }
+    const reviews = await listReviews({ productId, status: 'approved' });
+    const count = reviews.length;
+    const average = count ? Math.round((reviews.reduce((s, r) => s + r.rating, 0) / count) * 10) / 10 : 0;
+    res.json({ success: true, enabled: true, reviews, summary: { count, average } });
+  } catch (err: any) {
+    console.error('[reviews] list error:', err);
+    res.status(500).json({ success: false, message: 'Failed to load reviews.' });
+  }
+});
+
+// Public: submit a review (lands as 'pending' for admin moderation)
+app.post('/api/reviews', async (req, res) => {
+  const { productId, author, rating, title, body, images } = req.body || {};
+  const ratingNum = Math.round(Number(rating));
+  if (!productId || !String(author || '').trim() || !String(body || '').trim()) {
+    return res.status(400).json({ success: false, message: 'Name, rating and review text are required.' });
+  }
+  if (!Number.isFinite(ratingNum) || ratingNum < 1 || ratingNum > 5) {
+    return res.status(400).json({ success: false, message: 'Rating must be between 1 and 5 stars.' });
+  }
+  try {
+    const { products } = await getCatalogue();
+    if (!products.some((p: Product) => p.id === productId)) {
+      return res.status(400).json({ success: false, message: 'Unknown product.' });
+    }
+    const cleanImages = Array.isArray(images)
+      ? images.filter((u: any) => typeof u === 'string' && u.startsWith('/uploads/')).slice(0, 5)
+      : [];
+    const review: Review = {
+      id: 'rev_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
+      productId: String(productId),
+      author: String(author).trim().slice(0, 80),
+      rating: ratingNum,
+      title: title ? String(title).trim().slice(0, 120) : undefined,
+      body: String(body).trim().slice(0, 2000),
+      images: cleanImages,
+      verified: false,
+      status: 'pending',
+      createdAt: new Date().toISOString(),
+    };
+    await createReview(review);
+    res.json({ success: true, message: 'Thank you! Your review will appear once approved.' });
+  } catch (err: any) {
+    console.error('[reviews] create error:', err);
+    res.status(500).json({ success: false, message: 'Could not submit your review. Please try again.' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Admin: review moderation
+// ---------------------------------------------------------------------------
+app.get('/api/admin/reviews', requireAdmin, async (req, res) => {
+  try {
+    const status = (req.query.status as ReviewStatus) || undefined;
+    const reviews = await listReviews({ status });
+    res.json({ success: true, reviews });
+  } catch (err: any) {
+    console.error('[reviews] admin list error:', err);
+    res.status(500).json({ success: false, message: 'Failed to load reviews.' });
+  }
+});
+
+app.post('/api/admin/reviews/:id/status', requireAdmin, async (req, res) => {
+  const { status } = req.body || {};
+  const allowed: ReviewStatus[] = ['pending', 'approved', 'hidden'];
+  if (!allowed.includes(status)) {
+    return res.status(400).json({ success: false, message: 'Invalid review status.' });
+  }
+  try {
+    const review = await setReviewStatus(req.params.id, status);
+    if (!review) return res.status(404).json({ success: false, message: 'Review not found.' });
+    res.json({ success: true, review });
+  } catch (err: any) {
+    console.error('[reviews] status error:', err);
+    res.status(500).json({ success: false, message: 'Failed to update review.' });
+  }
+});
+
+app.post('/api/admin/reviews/:id/verified', requireAdmin, async (req, res) => {
+  try {
+    const review = await setReviewVerified(req.params.id, !!(req.body || {}).verified);
+    if (!review) return res.status(404).json({ success: false, message: 'Review not found.' });
+    res.json({ success: true, review });
+  } catch (err: any) {
+    console.error('[reviews] verify error:', err);
+    res.status(500).json({ success: false, message: 'Failed to update review.' });
+  }
+});
+
+app.delete('/api/admin/reviews/:id', requireAdmin, async (req, res) => {
+  try {
+    const ok = await deleteReview(req.params.id);
+    if (!ok) return res.status(404).json({ success: false, message: 'Review not found.' });
+    res.json({ success: true });
+  } catch (err: any) {
+    console.error('[reviews] delete error:', err);
+    res.status(500).json({ success: false, message: 'Failed to delete review.' });
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Public: create a PaymentIntent + a Pending order (server-validated prices/stock)
 // ---------------------------------------------------------------------------
 app.post('/api/create-payment-intent', async (req, res) => {
@@ -274,6 +398,9 @@ app.post('/api/create-payment-intent', async (req, res) => {
       const variant = variantForSize(product, size);
       if (!variant) {
         return res.status(400).json({ success: false, message: `Size ${size} is unavailable for "${product.name}".` });
+      }
+      if (variant.soldOut) {
+        return res.status(409).json({ success: false, message: `Size ${size} of "${product.name}" is sold out.` });
       }
       const qty = Math.max(1, Number(ci.quantity) || 1);
       if (variant.stock < qty) {

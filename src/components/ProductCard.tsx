@@ -5,7 +5,7 @@ import { Product, StoreConfig } from '../types';
 import {
   productSizes,
   sizeInStock,
-  totalStock,
+  availableStock,
   effectivePrice,
   comparePrice,
   discountPercent,
@@ -27,7 +27,7 @@ export default function ProductCard({ product, config, onViewDetails, onQuickAdd
   const discount = discountPercent(product);
   const compare = comparePrice(product);
   const price = effectivePrice(product);
-  const stock = totalStock(product);
+  const stock = availableStock(product);
   const purchasable = isPurchasable(product);
   const sizes = productSizes(product);
 

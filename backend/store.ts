@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import type { PoolConnection } from 'mysql2/promise';
-import type { Product, StoreConfig, Order, OrderStatus } from '../src/types';
+import type { Product, StoreConfig, Order, OrderStatus, Review, ReviewStatus } from '../src/types';
 import { normalizeProduct } from '../src/lib/products';
 import { INITIAL_PRODUCTS, INITIAL_STORE_CONFIG } from '../src/data';
 import { getPool } from './db';
@@ -22,6 +22,7 @@ interface JsonStoreShape {
   products: Product[];
   config: StoreConfig;
   orders: Order[];
+  reviews: Review[];
   webhookEvents: string[];
   lastUpdated: string;
 }
@@ -34,6 +35,7 @@ function readJsonStore(): JsonStoreShape {
         products: (raw.products || []).map(normalizeProduct),
         config: raw.config || INITIAL_STORE_CONFIG,
         orders: raw.orders || [],
+        reviews: raw.reviews || [],
         webhookEvents: raw.webhookEvents || [],
         lastUpdated: raw.lastUpdated || new Date().toISOString(),
       };
@@ -45,6 +47,7 @@ function readJsonStore(): JsonStoreShape {
     products: INITIAL_PRODUCTS,
     config: INITIAL_STORE_CONFIG,
     orders: [],
+    reviews: [],
     webhookEvents: [],
     lastUpdated: new Date().toISOString(),
   };
@@ -92,7 +95,7 @@ function rowToProduct(row: any, variants: any[]): Product {
     sizeGuide: row.size_guide || undefined,
     variants: variants
       .filter((v) => v.product_id === row.id)
-      .map((v) => ({ size: v.size, stock: Number(v.stock), sku: v.sku })),
+      .map((v) => ({ size: v.size, stock: Number(v.stock), sku: v.sku, soldOut: !!v.sold_out })),
   });
 }
 
@@ -133,6 +136,30 @@ export async function ensureSeeded(): Promise<void> {
       throw err;
     }
   }
+
+  // Idempotent migrations for databases created before these features existed.
+  try {
+    await pool.query('ALTER TABLE product_variants ADD COLUMN sold_out TINYINT(1) NOT NULL DEFAULT 0');
+  } catch (err: any) {
+    // ER_DUP_FIELDNAME (1060) — column already present; ignore.
+    if (err?.errno !== 1060) console.warn('[store] sold_out migration:', err?.message || err);
+  }
+  await pool.query(
+    `CREATE TABLE IF NOT EXISTS reviews (
+      id         VARCHAR(64)  NOT NULL PRIMARY KEY,
+      product_id VARCHAR(64)  NOT NULL,
+      author     VARCHAR(190) NOT NULL,
+      rating     TINYINT      NOT NULL DEFAULT 5,
+      title      VARCHAR(190) NULL,
+      body       TEXT NULL,
+      images     JSON NULL,
+      verified   TINYINT(1)   NOT NULL DEFAULT 0,
+      status     VARCHAR(20)  NOT NULL DEFAULT 'pending',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      KEY idx_review_product (product_id),
+      KEY idx_review_status (status)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`
+  );
 
   const [rows] = await pool.query<any[]>('SELECT COUNT(*) AS n FROM products');
   if (rows[0].n === 0) {
@@ -227,8 +254,8 @@ export async function saveCatalogue(products: Product[], config: StoreConfig): P
       await conn.query('DELETE FROM product_variants WHERE product_id = ?', [p.id]);
       for (const v of p.variants) {
         await conn.query(
-          'INSERT INTO product_variants (product_id, size, stock, sku) VALUES (?,?,?,?)',
-          [p.id, v.size, Math.max(0, Number(v.stock) || 0), v.sku]
+          'INSERT INTO product_variants (product_id, size, stock, sku, sold_out) VALUES (?,?,?,?,?)',
+          [p.id, v.size, Math.max(0, Number(v.stock) || 0), v.sku, v.soldOut ? 1 : 0]
         );
       }
     }
@@ -382,23 +409,46 @@ export async function setOrderStatus(opts: { id?: string; paymentIntentId?: stri
   return rows.length ? hydrateOrder(rows[0]) : null;
 }
 
-/** Decrement per-size stock for each line item of a paid order. */
+/** Decrement per-size stock for each line item of a paid order.
+ *  Auto-flips a product to "out_of_stock" once every size is depleted/sold out. */
 export async function decrementStockForOrder(order: Order): Promise<void> {
   if (!isDbConfigured()) {
     const s = readJsonStore();
+    const touched = new Set<string>();
     for (const it of order.items) {
       const p = s.products.find((x) => x.id === it.productId);
       const v = p?.variants.find((vv) => vv.size === it.size);
       if (v) v.stock = Math.max(0, v.stock - it.quantity);
+      if (it.productId) touched.add(it.productId);
+    }
+    // Auto out-of-stock when nothing buyable remains.
+    for (const id of touched) {
+      const p = s.products.find((x) => x.id === id);
+      if (p && p.status === 'active') {
+        const available = p.variants.reduce((sum, v) => sum + (v.soldOut ? 0 : v.stock), 0);
+        if (available <= 0) p.status = 'out_of_stock';
+      }
     }
     writeJsonStore(s);
     return;
   }
   const pool = getPool()!;
+  const touched = new Set<string>();
   for (const it of order.items) {
     await pool.query(
       'UPDATE product_variants SET stock = GREATEST(stock - ?, 0) WHERE product_id = ? AND size = ?',
       [it.quantity, it.productId, it.size]
+    );
+    if (it.productId) touched.add(it.productId);
+  }
+  // Auto out-of-stock when no buyable units remain across all sizes.
+  for (const id of touched) {
+    await pool.query(
+      `UPDATE products SET status = 'out_of_stock'
+       WHERE id = ? AND status = 'active'
+         AND (SELECT COALESCE(SUM(CASE WHEN sold_out = 1 THEN 0 ELSE stock END), 0)
+              FROM product_variants WHERE product_id = ?) <= 0`,
+      [id, id]
     );
   }
 }
@@ -415,4 +465,118 @@ export async function recordWebhookEvent(eventId: string, type: string): Promise
   const pool = getPool()!;
   const [res] = await pool.query<any>('INSERT IGNORE INTO webhook_events (id, type) VALUES (?, ?)', [eventId, type]);
   return res.affectedRows === 1;
+}
+
+// ---------------------------------------------------------------------------
+// Reviews
+// ---------------------------------------------------------------------------
+
+function rowToReview(row: any): Review {
+  return {
+    id: row.id,
+    productId: row.product_id,
+    author: row.author,
+    rating: Number(row.rating),
+    title: row.title || undefined,
+    body: row.body || '',
+    images: asArray(row.images),
+    verified: !!row.verified,
+    status: row.status,
+    createdAt: typeof row.created_at === 'string' ? row.created_at : new Date(row.created_at).toISOString(),
+  };
+}
+
+/** List reviews. Without a status filter returns everything (admin); pass 'approved' for the storefront. */
+export async function listReviews(opts: { productId?: string; status?: ReviewStatus } = {}): Promise<Review[]> {
+  if (!isDbConfigured()) {
+    const s = readJsonStore();
+    return s.reviews
+      .filter((r) => (opts.productId ? r.productId === opts.productId : true))
+      .filter((r) => (opts.status ? r.status === opts.status : true))
+      .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+  }
+  const pool = getPool()!;
+  const where: string[] = [];
+  const params: any[] = [];
+  if (opts.productId) { where.push('product_id = ?'); params.push(opts.productId); }
+  if (opts.status) { where.push('status = ?'); params.push(opts.status); }
+  const clause = where.length ? `WHERE ${where.join(' AND ')}` : '';
+  const [rows] = await pool.query<any[]>(`SELECT * FROM reviews ${clause} ORDER BY created_at DESC`, params);
+  return rows.map(rowToReview);
+}
+
+export async function createReview(review: Review): Promise<void> {
+  if (!isDbConfigured()) {
+    const s = readJsonStore();
+    s.reviews.unshift(review);
+    writeJsonStore(s);
+    return;
+  }
+  const pool = getPool()!;
+  await pool.query(
+    `INSERT INTO reviews (id, product_id, author, rating, title, body, images, verified, status)
+     VALUES (?,?,?,?,?,?,?,?,?)`,
+    [
+      review.id,
+      review.productId,
+      review.author,
+      review.rating,
+      review.title ?? null,
+      review.body,
+      JSON.stringify(review.images || []),
+      review.verified ? 1 : 0,
+      review.status,
+    ]
+  );
+}
+
+async function getReviewById(id: string): Promise<Review | null> {
+  if (!isDbConfigured()) {
+    const s = readJsonStore();
+    return s.reviews.find((r) => r.id === id) || null;
+  }
+  const pool = getPool()!;
+  const [rows] = await pool.query<any[]>('SELECT * FROM reviews WHERE id = ? LIMIT 1', [id]);
+  return rows.length ? rowToReview(rows[0]) : null;
+}
+
+export async function setReviewStatus(id: string, status: ReviewStatus): Promise<Review | null> {
+  if (!isDbConfigured()) {
+    const s = readJsonStore();
+    const r = s.reviews.find((x) => x.id === id);
+    if (!r) return null;
+    r.status = status;
+    writeJsonStore(s);
+    return r;
+  }
+  const pool = getPool()!;
+  await pool.query('UPDATE reviews SET status = ? WHERE id = ?', [status, id]);
+  return getReviewById(id);
+}
+
+export async function setReviewVerified(id: string, verified: boolean): Promise<Review | null> {
+  if (!isDbConfigured()) {
+    const s = readJsonStore();
+    const r = s.reviews.find((x) => x.id === id);
+    if (!r) return null;
+    r.verified = verified;
+    writeJsonStore(s);
+    return r;
+  }
+  const pool = getPool()!;
+  await pool.query('UPDATE reviews SET verified = ? WHERE id = ?', [verified ? 1 : 0, id]);
+  return getReviewById(id);
+}
+
+export async function deleteReview(id: string): Promise<boolean> {
+  if (!isDbConfigured()) {
+    const s = readJsonStore();
+    const before = s.reviews.length;
+    s.reviews = s.reviews.filter((r) => r.id !== id);
+    writeJsonStore(s);
+    return s.reviews.length < before;
+  }
+  const pool = getPool()!;
+  const [res] = await pool.query<any>('DELETE FROM reviews WHERE id = ?', [id]);
+  return res.affectedRows > 0;
 }

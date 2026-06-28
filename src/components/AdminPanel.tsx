@@ -1,7 +1,7 @@
 import { useState, useEffect, Fragment } from 'react';
 import { motion } from 'motion/react';
-import { X, Save, Plus, Trash2, Edit2, Key, Info, RefreshCw, CheckCircle, Package, Truck, Sliders, LayoutDashboard, ClipboardList, ChevronDown, AlertTriangle, Search, Image as ImageIcon, DollarSign, Upload, FolderPlus } from 'lucide-react';
-import { Product, ProductVariant, ShippingOption, StoreConfig, Order, OrderStatus } from '../types';
+import { X, Save, Plus, Trash2, Edit2, Key, Info, RefreshCw, CheckCircle, Package, Truck, Sliders, LayoutDashboard, ClipboardList, ChevronDown, AlertTriangle, Search, Image as ImageIcon, DollarSign, Upload, FolderPlus, Star, BadgeCheck, MessageSquare, EyeOff, Eye } from 'lucide-react';
+import { Product, ProductVariant, ShippingOption, StoreConfig, Order, OrderStatus, Review, ReviewStatus } from '../types';
 import { slugify, totalStock, productSizes, normalizeProduct } from '../lib/products';
 import { getCategories } from '../lib/categories';
 
@@ -20,7 +20,7 @@ export default function AdminPanel({
   config,
   onSaveConfig,
 }: AdminPanelProps) {
-  const [activeAdminTab, setActiveAdminTab] = useState<'dashboard' | 'products' | 'orders' | 'shipping' | 'global'>('dashboard');
+  const [activeAdminTab, setActiveAdminTab] = useState<'dashboard' | 'products' | 'orders' | 'reviews' | 'shipping' | 'global'>('dashboard');
 
   // Dashboard + orders (server-backed, token-authenticated)
   const [stats, setStats] = useState<any | null>(null);
@@ -36,6 +36,12 @@ export default function AdminPanel({
   // Per-product inline editor + delete confirmation
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+
+  // Reviews moderation (server-backed)
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [reviewsLoading, setReviewsLoading] = useState(false);
+  const [reviewFilter, setReviewFilter] = useState<'All' | ReviewStatus>('pending');
+  const [reviewBusyId, setReviewBusyId] = useState<string | null>(null);
 
   // Category creation + image upload
   const [newCatLabel, setNewCatLabel] = useState('');
@@ -146,6 +152,66 @@ export default function AdminPanel({
     }
   };
 
+  const loadReviews = async () => {
+    setReviewsLoading(true);
+    try {
+      const res = await authFetch('/api/admin/reviews');
+      const data = await res.json();
+      if (data.success) setReviews(data.reviews);
+    } catch {
+      /* non-fatal */
+    } finally {
+      setReviewsLoading(false);
+    }
+  };
+
+  const updateReviewStatus = async (id: string, status: ReviewStatus) => {
+    setReviewBusyId(id);
+    try {
+      const res = await authFetch(`/api/admin/reviews/${id}/status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }),
+      });
+      const data = await res.json();
+      if (data.success) setReviews((prev) => prev.map((r) => (r.id === id ? { ...r, status } : r)));
+    } catch {
+      /* ignore */
+    } finally {
+      setReviewBusyId(null);
+    }
+  };
+
+  const toggleReviewVerified = async (id: string, verified: boolean) => {
+    setReviewBusyId(id);
+    try {
+      const res = await authFetch(`/api/admin/reviews/${id}/verified`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ verified }),
+      });
+      const data = await res.json();
+      if (data.success) setReviews((prev) => prev.map((r) => (r.id === id ? { ...r, verified } : r)));
+    } catch {
+      /* ignore */
+    } finally {
+      setReviewBusyId(null);
+    }
+  };
+
+  const deleteReview = async (id: string) => {
+    setReviewBusyId(id);
+    try {
+      const res = await authFetch(`/api/admin/reviews/${id}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (data.success) setReviews((prev) => prev.filter((r) => r.id !== id));
+    } catch {
+      /* ignore */
+    } finally {
+      setReviewBusyId(null);
+    }
+  };
+
   const updateOrderStatus = async (orderId: string, status: OrderStatus) => {
     setUpdatingOrderId(orderId);
     try {
@@ -188,6 +254,7 @@ export default function AdminPanel({
       loadStats();
       loadOrders();
       loadCatalogue();
+      loadReviews();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated]);
@@ -673,16 +740,29 @@ export default function AdminPanel({
         </div>
         <div className="space-y-2">
           {p.variants.map((v, idx) => (
-            <div key={idx} className="grid grid-cols-[70px_80px_1fr_auto] gap-2 items-center">
+            <div key={idx} className="grid grid-cols-[70px_80px_1fr_auto_auto] gap-2 items-center">
               <input className={`${editorInput} text-center uppercase`} value={v.size} onChange={(e) => updateVariant(p.id, idx, { size: e.target.value.toUpperCase() })} />
               <input type="number" min={0} className={`${editorInput} text-center`} value={v.stock} onChange={(e) => updateVariant(p.id, idx, { stock: Math.max(0, Number(e.target.value) || 0) })} />
               <input className={editorInput} value={v.sku} onChange={(e) => updateVariant(p.id, idx, { sku: e.target.value })} />
+              <button
+                type="button"
+                onClick={() => updateVariant(p.id, idx, { soldOut: !v.soldOut })}
+                title="Toggle sold out for this size"
+                className={`px-2.5 py-2 text-[9px] font-mono uppercase tracking-wider border whitespace-nowrap transition-all ${
+                  v.soldOut
+                    ? 'bg-rose-950/40 border-rose-500/30 text-rose-300'
+                    : 'border-emerald-500/25 text-emerald-400 hover:border-emerald-500/50'
+                }`}
+              >
+                {v.soldOut ? 'Sold out' : 'In stock'}
+              </button>
               <button onClick={() => removeVariant(p.id, idx)} className="p-1.5 text-gray-500 hover:text-rose-400 hover:bg-rose-950/15 rounded">
                 <Trash2 className="w-4 h-4" />
               </button>
             </div>
           ))}
         </div>
+        <p className="text-[9px] text-gray-500 font-mono">A size is unavailable to buy when its stock is 0 <strong>or</strong> it's flagged <em>Sold out</em>.</p>
       </div>
 
       <div className="flex items-center justify-between pt-2 border-t border-[#E6B579]/10">
@@ -775,6 +855,18 @@ export default function AdminPanel({
           >
             <ClipboardList className="w-4 h-4" />
             <span>Orders ({orders.length})</span>
+          </button>
+          <button
+            id="admin-tab-reviews"
+            onClick={() => { setActiveAdminTab('reviews'); loadReviews(); }}
+            className={`px-6 py-4 text-xs font-mono tracking-widest uppercase flex items-center gap-2 whitespace-nowrap ${
+              activeAdminTab === 'reviews'
+                ? 'bg-[#06211E] text-[#E6B579] border-t-2 border-[#E6B579]'
+                : 'text-gray-400 hover:text-white'
+            }`}
+          >
+            <MessageSquare className="w-4 h-4" />
+            <span>Reviews ({reviews.filter((r) => r.status === 'pending').length})</span>
           </button>
           <button
             id="admin-tab-shipping"
@@ -999,6 +1091,149 @@ export default function AdminPanel({
             </div>
           )}
 
+          {/* TAB: REVIEWS MODERATION */}
+          {activeAdminTab === 'reviews' && (
+            <div className="space-y-5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex flex-wrap gap-2">
+                  {(['pending', 'approved', 'hidden', 'All'] as const).map((f) => (
+                    <button
+                      key={f}
+                      onClick={() => setReviewFilter(f)}
+                      className={`px-3 py-1.5 text-[10px] font-mono uppercase tracking-widest border transition-all ${
+                        reviewFilter === f
+                          ? 'bg-[#E6B579] text-[#06211E] border-[#E6B579] font-bold'
+                          : 'border-[#E6B579]/20 text-gray-300 hover:border-[#E6B579]/60'
+                      }`}
+                    >
+                      {f}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  onClick={loadReviews}
+                  className="flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-widest text-gray-400 hover:text-[#E6B579] transition-colors"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${reviewsLoading ? 'animate-spin' : ''}`} /> Refresh
+                </button>
+              </div>
+
+              <div className={`p-3 text-[11px] font-mono flex items-center gap-2 border ${
+                localConfig.reviewsEnabled !== false
+                  ? 'text-emerald-300 bg-emerald-950/20 border-emerald-500/20'
+                  : 'text-rose-300 bg-rose-950/20 border-rose-500/20'
+              }`}>
+                <Info className="w-4 h-4 shrink-0" />
+                <span>
+                  Reviews are currently <strong>{localConfig.reviewsEnabled !== false ? 'visible' : 'hidden'}</strong> on the storefront.
+                  Toggle this under <em>Stripe Security &amp; Config</em>. Only <strong>approved</strong> reviews are shown publicly.
+                </span>
+              </div>
+
+              {reviewsLoading ? (
+                <p className="text-xs text-gray-400 font-mono">Loading reviews…</p>
+              ) : (() => {
+                const filtered = reviews.filter((r) => reviewFilter === 'All' || r.status === reviewFilter);
+                if (filtered.length === 0) {
+                  return <p className="text-xs text-gray-500 font-mono py-8 text-center">No reviews in this view.</p>;
+                }
+                return (
+                  <div className="space-y-3">
+                    {filtered.map((r) => {
+                      const productName = localProducts.find((p) => p.id === r.productId)?.name || r.productId;
+                      return (
+                        <div key={r.id} className="bg-[#03100e] border border-[#E6B579]/10 p-4 space-y-3">
+                          <div className="flex items-start justify-between gap-3 flex-wrap">
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <div className="flex items-center gap-0.5">
+                                  {[1, 2, 3, 4, 5].map((n) => (
+                                    <Star key={n} className={`w-3.5 h-3.5 ${n <= r.rating ? 'text-[#E6B579] fill-[#E6B579]' : 'text-gray-600'}`} />
+                                  ))}
+                                </div>
+                                <span className="text-sm text-white font-medium">{r.author}</span>
+                                {r.verified && (
+                                  <span className="inline-flex items-center gap-1 text-[8px] font-mono uppercase tracking-widest text-emerald-300 bg-emerald-950/30 border border-emerald-500/25 px-1.5 py-0.5">
+                                    <BadgeCheck className="w-3 h-3" /> Verified
+                                  </span>
+                                )}
+                                <ReviewStatusBadge status={r.status} />
+                              </div>
+                              <p className="text-[10px] font-mono text-gray-500">
+                                {productName} · {new Date(r.createdAt).toLocaleDateString('en-AU', { year: 'numeric', month: 'short', day: 'numeric' })}
+                              </p>
+                            </div>
+                          </div>
+
+                          {r.title && <h4 className="font-serif text-sm text-white">{r.title}</h4>}
+                          <p className="text-xs text-gray-300 leading-relaxed whitespace-pre-line">{r.body}</p>
+
+                          {r.images.length > 0 && (
+                            <div className="flex flex-wrap gap-2">
+                              {r.images.map((img, i) => (
+                                <a key={i} href={img} target="_blank" rel="noreferrer" className="w-14 h-16 border border-[#E6B579]/15 overflow-hidden hover:border-[#E6B579]/50">
+                                  <img src={img} alt="" className="w-full h-full object-cover" />
+                                </a>
+                              ))}
+                            </div>
+                          )}
+
+                          <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-[#E6B579]/10">
+                            {r.status !== 'approved' && (
+                              <button
+                                disabled={reviewBusyId === r.id}
+                                onClick={() => updateReviewStatus(r.id, 'approved')}
+                                className="px-2.5 py-1 text-[9px] font-mono uppercase tracking-wider border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10 transition-all flex items-center gap-1 disabled:opacity-40"
+                              >
+                                <CheckCircle className="w-3 h-3" /> Approve
+                              </button>
+                            )}
+                            {r.status !== 'hidden' && (
+                              <button
+                                disabled={reviewBusyId === r.id}
+                                onClick={() => updateReviewStatus(r.id, 'hidden')}
+                                className="px-2.5 py-1 text-[9px] font-mono uppercase tracking-wider border border-gray-600 text-gray-300 hover:bg-white/5 transition-all flex items-center gap-1 disabled:opacity-40"
+                              >
+                                <EyeOff className="w-3 h-3" /> Hide
+                              </button>
+                            )}
+                            {r.status !== 'pending' && (
+                              <button
+                                disabled={reviewBusyId === r.id}
+                                onClick={() => updateReviewStatus(r.id, 'pending')}
+                                className="px-2.5 py-1 text-[9px] font-mono uppercase tracking-wider border border-amber-500/30 text-amber-400 hover:bg-amber-500/10 transition-all flex items-center gap-1 disabled:opacity-40"
+                              >
+                                <Eye className="w-3 h-3" /> Unpublish
+                              </button>
+                            )}
+                            <button
+                              disabled={reviewBusyId === r.id}
+                              onClick={() => toggleReviewVerified(r.id, !r.verified)}
+                              className={`px-2.5 py-1 text-[9px] font-mono uppercase tracking-wider border transition-all flex items-center gap-1 disabled:opacity-40 ${
+                                r.verified
+                                  ? 'border-emerald-500/40 text-emerald-300 bg-emerald-950/20'
+                                  : 'border-[#E6B579]/30 text-[#E6B579] hover:bg-[#E6B579]/10'
+                              }`}
+                            >
+                              <BadgeCheck className="w-3 h-3" /> {r.verified ? 'Verified ✓' : 'Mark verified'}
+                            </button>
+                            <button
+                              disabled={reviewBusyId === r.id}
+                              onClick={() => deleteReview(r.id)}
+                              className="ml-auto px-2.5 py-1 text-[9px] font-mono uppercase tracking-wider border border-rose-500/30 text-rose-400 hover:bg-rose-950/20 transition-all flex items-center gap-1 disabled:opacity-40"
+                            >
+                              <Trash2 className="w-3 h-3" /> Delete
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+
           {/* TAB 1: PRODUCT CATALOG MANAGEMENT */}
           {activeAdminTab === 'products' && (
             <div className="space-y-6">
@@ -1213,8 +1448,16 @@ export default function AdminPanel({
                           <td className="p-3">
                             <div className="flex flex-wrap gap-1.5 max-w-[220px]">
                               {p.variants.map((v) => (
-                                <label key={v.size} className="flex items-center gap-1 bg-[#03100e] border border-[#E6B579]/20 px-1.5 py-1">
-                                  <span className="text-[9px] font-mono text-[#E6B579] uppercase">{v.size}</span>
+                                <label
+                                  key={v.size}
+                                  title={v.soldOut ? 'Flagged sold out (edit to change)' : undefined}
+                                  className={`flex items-center gap-1 px-1.5 py-1 border ${
+                                    v.soldOut || v.stock === 0
+                                      ? 'bg-rose-950/20 border-rose-500/30'
+                                      : 'bg-[#03100e] border-[#E6B579]/20'
+                                  }`}
+                                >
+                                  <span className={`text-[9px] font-mono uppercase ${v.soldOut ? 'text-rose-300 line-through' : 'text-[#E6B579]'}`}>{v.size}</span>
                                   <input
                                     type="number"
                                     min={0}
@@ -1520,6 +1763,26 @@ export default function AdminPanel({
 
                   <div className="h-px bg-[#E6B579]/10" />
 
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="font-bold text-white uppercase font-serif tracking-widest">Customer Reviews On Site</h4>
+                      <p className="text-[11px] text-gray-400 mt-0.5">Show the client reviews section on product pages. Turn off to hide all reviews site-wide (they remain saved and can be moderated under the Reviews tab).</p>
+                    </div>
+                    <button
+                      id="reviews-toggle-btn"
+                      onClick={() => setLocalConfig(prev => ({ ...prev, reviewsEnabled: !(prev.reviewsEnabled !== false) }))}
+                      className={`px-4 py-2 font-mono text-xs uppercase tracking-widest transition-all whitespace-nowrap ${
+                        localConfig.reviewsEnabled !== false
+                          ? 'bg-emerald-500 text-[#06211E] font-bold'
+                          : 'bg-gray-800 border border-gray-700 text-gray-400'
+                      }`}
+                    >
+                      {localConfig.reviewsEnabled !== false ? 'Reviews Shown' : 'Reviews Hidden'}
+                    </button>
+                  </div>
+
+                  <div className="h-px bg-[#E6B579]/10" />
+
                   <div className="space-y-2">
                     <h4 className="font-bold text-white uppercase font-serif tracking-widest">Melbourne Flagship Details</h4>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1596,6 +1859,19 @@ export default function AdminPanel({
 
       </motion.div>
     </div>
+  );
+}
+
+function ReviewStatusBadge({ status }: { status: ReviewStatus }) {
+  const map: Record<ReviewStatus, string> = {
+    approved: 'bg-emerald-950/40 border-emerald-500/30 text-emerald-400',
+    pending: 'bg-amber-500/10 border-amber-500/30 text-amber-400',
+    hidden: 'bg-gray-900 border-gray-700 text-gray-400',
+  };
+  return (
+    <span className={`px-2 py-0.5 font-mono text-[8px] uppercase tracking-wider rounded-full border ${map[status]}`}>
+      {status}
+    </span>
   );
 }
 

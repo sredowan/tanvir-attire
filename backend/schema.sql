@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS product_variants (
   size       VARCHAR(32)  NOT NULL,
   stock      INT          NOT NULL DEFAULT 0,
   sku        VARCHAR(120) NOT NULL,
+  sold_out   TINYINT(1)   NOT NULL DEFAULT 0,
   UNIQUE KEY uniq_product_size (product_id, size),
   KEY idx_variant_product (product_id),
   CONSTRAINT fk_variant_product FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
@@ -84,6 +85,23 @@ CREATE TABLE IF NOT EXISTS webhook_events (
   id           VARCHAR(190) NOT NULL PRIMARY KEY,
   type         VARCHAR(120) NULL,
   processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Customer reviews. New reviews land as 'pending' and only show publicly once
+-- an admin approves them. `verified` is the admin-toggled "Verified Purchase" badge.
+CREATE TABLE IF NOT EXISTS reviews (
+  id         VARCHAR(64)  NOT NULL PRIMARY KEY,
+  product_id VARCHAR(64)  NOT NULL,
+  author     VARCHAR(190) NOT NULL,
+  rating     TINYINT      NOT NULL DEFAULT 5,
+  title      VARCHAR(190) NULL,
+  body       TEXT NULL,
+  images     JSON NULL,
+  verified   TINYINT(1)   NOT NULL DEFAULT 0,
+  status     VARCHAR(20)  NOT NULL DEFAULT 'pending',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_review_product (product_id),
+  KEY idx_review_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS admin_users (

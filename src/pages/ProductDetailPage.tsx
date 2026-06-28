@@ -16,6 +16,7 @@ import {
 import { categoryTagline } from '../lib/categories';
 import SizeGuideModal from '../components/SizeGuideModal';
 import ImageLightbox from '../components/ImageLightbox';
+import ProductReviews from '../components/ProductReviews';
 
 interface ProductDetailPageProps {
   products: Product[];
@@ -291,6 +292,8 @@ function ProductDetail({
           </div>
         </div>
       </div>
+
+      {config?.reviewsEnabled !== false && <ProductReviews productId={product.id} />}
 
       <SizeGuideModal open={sizeGuideOpen} onClose={() => setSizeGuideOpen(false)} guideKey={product.sizeGuide} />
       <ImageLightbox

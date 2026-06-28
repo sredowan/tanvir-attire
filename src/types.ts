@@ -9,6 +9,7 @@ export interface ProductVariant {
   size: string;   // e.g. 'M', 'L', 'XL', 'XXL'
   stock: number;  // units available for this specific size
   sku: string;    // unique stock-keeping unit, e.g. 'PANJABI-M'
+  soldOut?: boolean; // admin-forced "sold out" for this size, independent of the stock number
 }
 
 export interface ProductCategory {
@@ -53,6 +54,32 @@ export interface StoreConfig {
   allowInternationalShipping: boolean;
   internationalShippingFee: number;
   categories?: ProductCategory[];
+  reviewsEnabled?: boolean; // when false, customer reviews are hidden site-wide (default: shown)
+}
+
+// ---------------------------------------------------------------------------
+// Customer reviews (persisted server-side, moderated by admin)
+// ---------------------------------------------------------------------------
+
+export type ReviewStatus = 'pending' | 'approved' | 'hidden';
+
+export interface Review {
+  id: string;
+  productId: string;
+  author: string;        // reviewer display name
+  rating: number;        // 1–5 stars
+  title?: string;
+  body: string;
+  images: string[];      // optional uploaded photo URLs
+  verified: boolean;     // admin-marked "Verified Purchase" badge
+  status: ReviewStatus;  // pending → approved/hidden (only approved show publicly)
+  createdAt: string;
+}
+
+/** Aggregate rating summary for a product. */
+export interface ReviewSummary {
+  count: number;
+  average: number; // 0 when no approved reviews
 }
 
 export interface CartItem {

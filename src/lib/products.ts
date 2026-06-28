@@ -15,6 +15,7 @@ export function normalizeProduct(raw: any): Product {
       size: String(v.size ?? `SIZE-${i + 1}`),
       stock: Number(v.stock) || 0,
       sku: String(v.sku ?? `${slugify(name).toUpperCase().slice(0, 12)}-${v.size ?? i}`),
+      soldOut: !!v.soldOut,
     }));
   } else if (legacySizes.length > 0) {
     const total = Number(raw?.stockLevel) || 0;
@@ -80,15 +81,20 @@ export function variantForSize(product: Product, size: string): ProductVariant |
   return (product.variants ?? []).find((v) => v.size === size);
 }
 
-/** Whether a given size is currently in stock. */
+/** Whether a given size can currently be purchased (not admin-sold-out and has stock). */
 export function sizeInStock(product: Product, size: string): boolean {
   const v = variantForSize(product, size);
-  return !!v && v.stock > 0;
+  return !!v && !v.soldOut && v.stock > 0;
 }
 
-/** Total units across all sizes. */
+/** Total units across all sizes (counts physical stock, ignores the sold-out flag). */
 export function totalStock(product: Product): number {
   return (product.variants ?? []).reduce((sum, v) => sum + (Number(v.stock) || 0), 0);
+}
+
+/** Units that are actually available to buy (excludes sizes flagged sold-out). */
+export function availableStock(product: Product): number {
+  return (product.variants ?? []).reduce((sum, v) => sum + (v.soldOut ? 0 : Number(v.stock) || 0), 0);
 }
 
 /** The effective price a customer pays (sale price wins when present and lower). */
@@ -122,12 +128,12 @@ export function isVisible(product: Product): boolean {
 
 /** Can be added to cart right now. */
 export function isPurchasable(product: Product): boolean {
-  return product.status === 'active' && totalStock(product) > 0;
+  return product.status === 'active' && availableStock(product) > 0;
 }
 
-/** First in-stock size, falling back to the first listed size. */
+/** First buyable size, falling back to the first listed size. */
 export function defaultSize(product: Product): string {
-  const inStock = (product.variants ?? []).find((v) => v.stock > 0);
+  const inStock = (product.variants ?? []).find((v) => !v.soldOut && v.stock > 0);
   if (inStock) return inStock.size;
   return productSizes(product)[0] ?? '';
 }
